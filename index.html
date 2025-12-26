@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scrappy Wiki</title>
+  <link rel="stylesheet" href="wiki.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "@drifting-ink/ledger": "https://esm.sh/@drifting-ink/ledger",
+      "@drifting-ink/parchment": "https://esm.sh/@drifting-ink/parchment@0.2.0",
+      "@vlcn.io/crsqlite-wasm": "https://esm.sh/@vlcn.io/crsqlite-wasm",
+      "marked": "https://esm.sh/marked"
+    }
+  }
+  </script>
+</head>
+<body>
+  <header class="toolbar">
+    <div class="toolbar-left">
+      <h1 class="page-title">home</h1>
+    </div>
+    <div class="toolbar-right">
+      <span class="peer-status" title="Peer connections">
+        <span class="peer-indicator"></span>
+        <span class="peer-count">0 peers</span>
+      </span>
+      <button class="btn btn-edit" id="edit-btn">Edit</button>
+      <button class="btn btn-share" id="share-btn">Share</button>
+    </div>
+  </header>
+
+  <main class="content-area">
+    <!-- View mode: rendered markdown -->
+    <div id="wiki-content" class="wiki-view"></div>
+
+    <!-- Edit mode: split pane -->
+    <div class="editor-pane hidden" id="editor-pane">
+      <div class="editor-split">
+        <div class="editor-input">
+          <textarea id="editor-textarea" placeholder="Write your markdown here..."></textarea>
+        </div>
+        <div class="editor-preview" id="editor-preview"></div>
+      </div>
+      <div class="editor-actions">
+        <button class="btn btn-cancel" id="cancel-btn">Cancel</button>
+        <button class="btn btn-save" id="save-btn">Save</button>
+      </div>
+    </div>
+  </main>
+
+  <div class="status-bar" id="status-bar">
+    <span class="status-message">Initializing...</span>
+  </div>
+
+  <script type="module" src="wiki.js"></script>
+</body>
+</html>
