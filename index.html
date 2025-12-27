@@ -85,7 +85,18 @@
       <h2>Version History</h2>
       <button class="history-close" id="history-close">&times;</button>
     </div>
-    <div class="history-versions" id="history-versions"></div>
+    <div class="history-body">
+      <div class="history-sidebar">
+        <div class="history-versions" id="history-versions"></div>
+      </div>
+      <div class="history-preview" id="history-preview">
+        <div class="history-preview-empty">Select a version to preview</div>
+      </div>
+    </div>
+    <div class="history-actions hidden" id="history-actions">
+      <button class="btn btn-cancel" id="history-cancel">Cancel</button>
+      <button class="btn btn-save" id="history-restore">Restore This Version</button>
+    </div>
   </div>
 
   <div class="status-bar hidden" id="status-bar">

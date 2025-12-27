@@ -579,7 +579,8 @@ body {
   right: 0;
   top: 0;
   bottom: 0;
-  width: 320px;
+  width: 700px;
+  max-width: 90vw;
   background: #fff;
   border-left: 1px solid #e0e0e0;
   box-shadow: -4px 0 12px rgba(0, 0, 0, 0.1);
@@ -617,44 +618,96 @@ body {
   color: #333;
 }
 
-.history-versions {
+.history-body {
   flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.history-sidebar {
+  width: 200px;
+  border-right: 1px solid #e0e0e0;
   overflow-y: auto;
-  padding: 0.75rem;
+}
+
+.history-versions {
+  padding: 0.5rem;
 }
 
 .history-version {
-  padding: 0.75rem 1rem;
-  border-radius: 0.5rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: 0.375rem;
   cursor: pointer;
-  margin-bottom: 0.5rem;
-  background: #f9fafb;
+  margin-bottom: 0.25rem;
   transition: background 0.15s;
 }
 
 .history-version:hover {
-  background: #f0f0f0;
+  background: #f5f5f5;
+}
+
+.history-version.selected {
+  background: #e3f2fd;
 }
 
 .history-version-time {
   font-weight: 500;
   color: #333;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
 }
 
 .history-version-peer {
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   color: #666;
   margin-top: 0.125rem;
 }
 
-.history-version-preview {
-  font-size: 0.8rem;
+.history-preview {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+  background: #fafafa;
+}
+
+.history-preview-empty {
   color: #999;
-  margin-top: 0.375rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  text-align: center;
+  padding: 2rem;
+}
+
+.history-diff {
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.diff-line {
+  padding: 0.125rem 0.5rem;
+  margin: 0 -0.5rem;
+}
+
+.diff-add {
+  background: #d4edda;
+  color: #155724;
+}
+
+.diff-remove {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.diff-context {
+  color: #666;
+}
+
+.history-actions {
+  padding: 0.75rem 1rem;
+  border-top: 1px solid #e0e0e0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
 }
 
 .history-empty {

@@ -106,6 +106,10 @@ const historyBtn = document.getElementById('history-btn');
 const historyPanel = document.getElementById('history-panel');
 const historyClose = document.getElementById('history-close');
 const historyVersions = document.getElementById('history-versions');
+const historyPreview = document.getElementById('history-preview');
+const historyActions = document.getElementById('history-actions');
+const historyRestore = document.getElementById('history-restore');
+const historyCancel = document.getElementById('history-cancel');
 
 // State
 let db = null;
@@ -114,6 +118,8 @@ let isEditing = false;
 let originalContent = '';
 let searchResults = [];
 let selectedSearchIndex = -1;
+let selectedVersionContent = null;
+let currentPageContent = '';
 
 // Configuration
 const SIGNALING_URL = 'wss://drifting.ink/ws/signal';
@@ -353,9 +359,65 @@ function goToWiki(token) {
   window.location.search = params.toString();
 }
 
+// Simple line-based diff
+function computeDiff(oldText, newText) {
+  const oldLines = oldText.split('\n');
+  const newLines = newText.split('\n');
+  const result = [];
+
+  // Simple LCS-based diff
+  const lcs = [];
+  for (let i = 0; i <= oldLines.length; i++) {
+    lcs[i] = [];
+    for (let j = 0; j <= newLines.length; j++) {
+      if (i === 0 || j === 0) {
+        lcs[i][j] = 0;
+      } else if (oldLines[i - 1] === newLines[j - 1]) {
+        lcs[i][j] = lcs[i - 1][j - 1] + 1;
+      } else {
+        lcs[i][j] = Math.max(lcs[i - 1][j], lcs[i][j - 1]);
+      }
+    }
+  }
+
+  // Backtrack to find diff
+  let i = oldLines.length, j = newLines.length;
+  const diff = [];
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && oldLines[i - 1] === newLines[j - 1]) {
+      diff.unshift({ type: 'context', line: oldLines[i - 1] });
+      i--; j--;
+    } else if (j > 0 && (i === 0 || lcs[i][j - 1] >= lcs[i - 1][j])) {
+      diff.unshift({ type: 'add', line: newLines[j - 1] });
+      j--;
+    } else {
+      diff.unshift({ type: 'remove', line: oldLines[i - 1] });
+      i--;
+    }
+  }
+
+  return diff;
+}
+
+function renderDiff(diff) {
+  return diff.map(d => {
+    const prefix = d.type === 'add' ? '+' : d.type === 'remove' ? '-' : ' ';
+    const cls = d.type === 'add' ? 'diff-add' : d.type === 'remove' ? 'diff-remove' : 'diff-context';
+    const escaped = d.line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return `<div class="diff-line ${cls}">${prefix} ${escaped}</div>`;
+  }).join('');
+}
+
 // Version history panel functions
 async function openHistoryPanel() {
   historyPanel.classList.remove('hidden');
+  selectedVersionContent = null;
+  historyActions.classList.add('hidden');
+  historyPreview.innerHTML = '<div class="history-preview-empty">Select a version to preview</div>';
+
+  // Get current page content for diff
+  const currentResult = await db.exec('SELECT content FROM pages WHERE slug = ?', [currentSlug]);
+  currentPageContent = currentResult.rows.length > 0 ? currentResult.rows[0][0] : '';
 
   const versions = await getPageHistory(currentSlug);
 
@@ -365,28 +427,37 @@ async function openHistoryPanel() {
   }
 
   historyVersions.innerHTML = versions.map(v => `
-    <div class="history-version" data-version-id="${v.id}">
+    <div class="history-version" data-version-id="${v.id}" data-content="${encodeURIComponent(v.content)}">
       <div class="history-version-time">${formatRelativeTime(v.created_at)}</div>
       <div class="history-version-peer">by ${v.peer_id.slice(0, 8)}</div>
-      <div class="history-version-preview">${v.content.slice(0, 80).replace(/\n/g, ' ')}${v.content.length > 80 ? '...' : ''}</div>
     </div>
   `).join('');
 }
 
-function closeHistoryPanel() {
-  historyPanel.classList.add('hidden');
+function selectVersion(versionEl) {
+  // Deselect previous
+  historyVersions.querySelectorAll('.history-version').forEach(el => el.classList.remove('selected'));
+  versionEl.classList.add('selected');
+
+  // Get content and show diff
+  selectedVersionContent = decodeURIComponent(versionEl.dataset.content);
+  const diff = computeDiff(currentPageContent, selectedVersionContent);
+
+  historyPreview.innerHTML = `<div class="history-diff">${renderDiff(diff)}</div>`;
+  historyActions.classList.remove('hidden');
 }
 
-async function restoreVersion(versionId) {
-  const versions = await getPageHistory(currentSlug);
-  const version = versions.find(v => v.id === versionId);
+function closeHistoryPanel() {
+  historyPanel.classList.add('hidden');
+  selectedVersionContent = null;
+}
 
-  if (version && confirm('Restore this version? This will save it as a new version.')) {
-    await savePage(currentSlug, version.content);
-    closeHistoryPanel();
-    Parchment.go(currentSlug);
-    setStatus('Version restored', 'success');
-  }
+async function restoreVersion() {
+  if (!selectedVersionContent) return;
+  await savePageWithVersion(currentSlug, selectedVersionContent);
+  closeHistoryPanel();
+  Parchment.go(currentSlug);
+  setStatus('Version restored', 'success');
 }
 
 // Normalize slug to lowercase, strip .md extension
@@ -416,8 +487,19 @@ async function wikiResolver(path) {
   }
 }
 
-// Save page to database
+// Save page to database (without creating a version)
 async function savePage(slug, content) {
+  slug = normalizeSlug(slug);
+  const now = new Date().toISOString();
+  await db.exec(
+    `INSERT INTO pages (slug, content, updated_at) VALUES (?, ?, ?)
+     ON CONFLICT(slug) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at`,
+    [slug, content, now]
+  );
+}
+
+// Save page and create a version entry (for explicit user saves)
+async function savePageWithVersion(slug, content) {
   slug = normalizeSlug(slug);
   const now = new Date().toISOString();
   const versionId = crypto.randomUUID();
@@ -485,7 +567,7 @@ async function handleSave() {
   const content = editorTextarea.value;
 
   try {
-    await savePage(currentSlug, content);
+    await savePageWithVersion(currentSlug, content);
     setStatus('Page saved', 'success');
     exitEditMode();
     // Refresh the view
@@ -766,11 +848,13 @@ searchDropdown.addEventListener('click', (e) => {
 // Version history panel event listeners
 historyBtn.addEventListener('click', openHistoryPanel);
 historyClose.addEventListener('click', closeHistoryPanel);
+historyCancel.addEventListener('click', closeHistoryPanel);
+historyRestore.addEventListener('click', restoreVersion);
 
 historyVersions.addEventListener('click', (e) => {
   const item = e.target.closest('.history-version');
   if (item) {
-    restoreVersion(item.dataset.versionId);
+    selectVersion(item);
   }
 });
 
