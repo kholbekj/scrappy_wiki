@@ -31,7 +31,7 @@ let searchResults = [];
 let selectedSearchIndex = -1;
 
 // Configuration
-const SIGNALING_URL = 'ws://localhost:4321/ws/signal';
+const SIGNALING_URL = 'wss://drifting.ink/ws/signal';
 
 // Status helpers
 function setStatus(message, type = '') {
