@@ -19,15 +19,19 @@ const peerIndicator = document.querySelector('.peer-indicator');
 const peerCount = document.querySelector('.peer-count');
 const statusBar = document.getElementById('status-bar');
 const statusMessage = statusBar.querySelector('.status-message');
+const searchInput = document.getElementById('search-input');
+const searchDropdown = document.getElementById('search-dropdown');
 
 // State
 let db = null;
 let currentSlug = 'home';
 let isEditing = false;
 let originalContent = '';
+let searchResults = [];
+let selectedSearchIndex = -1;
 
 // Configuration
-const SIGNALING_URL = 'ws://localhost:8081';
+const SIGNALING_URL = 'ws://localhost:4321/ws/signal';
 
 // Status helpers
 function setStatus(message, type = '') {
@@ -40,9 +44,179 @@ function updatePeerStatus(count) {
   peerIndicator.classList.toggle('connected', count > 0);
 }
 
+// Fuzzy search helper
+function fuzzyMatch(query, text) {
+  query = query.toLowerCase();
+  text = text.toLowerCase();
+
+  let queryIdx = 0;
+  let score = 0;
+  let lastMatchIdx = -1;
+  const matches = [];
+
+  for (let i = 0; i < text.length && queryIdx < query.length; i++) {
+    if (text[i] === query[queryIdx]) {
+      matches.push(i);
+      // Bonus for consecutive matches
+      if (lastMatchIdx === i - 1) score += 10;
+      // Bonus for match at start
+      if (i === 0) score += 20;
+      // Bonus for match after separator
+      if (i > 0 && /[\s\-_]/.test(text[i - 1])) score += 15;
+      score += 1;
+      lastMatchIdx = i;
+      queryIdx++;
+    }
+  }
+
+  // All query chars must match
+  if (queryIdx < query.length) return null;
+
+  return { score, matches };
+}
+
+function highlightMatches(text, matches) {
+  if (!matches || matches.length === 0) return text;
+
+  let result = '';
+  let lastIdx = 0;
+
+  for (const idx of matches) {
+    result += text.slice(lastIdx, idx);
+    result += `<mark>${text[idx]}</mark>`;
+    lastIdx = idx + 1;
+  }
+  result += text.slice(lastIdx);
+
+  return result;
+}
+
+async function searchPages(query) {
+  if (!query.trim()) {
+    hideSearchDropdown();
+    return;
+  }
+
+  try {
+    const result = await db.exec('SELECT slug, content FROM pages');
+    const pages = result.rows.map(([slug, content]) => ({ slug, content }));
+
+    // Fuzzy match against slug and content
+    const matches = [];
+    for (const page of pages) {
+      const slugMatch = fuzzyMatch(query, page.slug);
+      const contentMatch = fuzzyMatch(query, page.content);
+
+      if (slugMatch || contentMatch) {
+        const score = Math.max(
+          slugMatch ? slugMatch.score * 2 : 0, // Boost slug matches
+          contentMatch ? contentMatch.score : 0
+        );
+        matches.push({
+          ...page,
+          score,
+          slugMatches: slugMatch?.matches || [],
+          preview: getPreview(page.content, query)
+        });
+      }
+    }
+
+    // Sort by score descending
+    matches.sort((a, b) => b.score - a.score);
+
+    searchResults = matches.slice(0, 10);
+    selectedSearchIndex = -1;
+    renderSearchDropdown(query);
+  } catch (err) {
+    console.error('Search failed:', err);
+  }
+}
+
+function getPreview(content, query) {
+  const lines = content.split('\n').filter(l => l.trim() && !l.startsWith('#'));
+  const queryLower = query.toLowerCase();
+
+  // Find line containing query
+  for (const line of lines) {
+    if (line.toLowerCase().includes(queryLower)) {
+      const idx = line.toLowerCase().indexOf(queryLower);
+      const start = Math.max(0, idx - 30);
+      const end = Math.min(line.length, idx + query.length + 30);
+      let preview = line.slice(start, end).trim();
+      if (start > 0) preview = '...' + preview;
+      if (end < line.length) preview += '...';
+      return preview;
+    }
+  }
+
+  // Fallback to first non-header line
+  return lines[0]?.slice(0, 60) + (lines[0]?.length > 60 ? '...' : '') || '';
+}
+
+function renderSearchDropdown(query) {
+  if (searchResults.length === 0) {
+    searchDropdown.innerHTML = `
+      <div class="search-create" data-create="${query}">
+        Create page "<strong>${query}</strong>"
+      </div>
+    `;
+  } else {
+    const items = searchResults.map((r, i) => `
+      <div class="search-item${i === selectedSearchIndex ? ' selected' : ''}" data-slug="${r.slug}">
+        <div class="search-item-title">${highlightMatches(r.slug, r.slugMatches)}</div>
+        <div class="search-item-preview">${r.preview}</div>
+      </div>
+    `).join('');
+
+    searchDropdown.innerHTML = items + `
+      <div class="search-create" data-create="${query}">
+        Create page "<strong>${query}</strong>"
+      </div>
+    `;
+  }
+
+  searchDropdown.classList.remove('hidden');
+}
+
+function hideSearchDropdown() {
+  searchDropdown.classList.add('hidden');
+  searchResults = [];
+  selectedSearchIndex = -1;
+}
+
+function navigateToPage(slug) {
+  hideSearchDropdown();
+  searchInput.value = '';
+  Parchment.go(normalizeSlug(slug));
+}
+
+function selectSearchResult(index) {
+  selectedSearchIndex = Math.max(-1, Math.min(index, searchResults.length));
+  const items = searchDropdown.querySelectorAll('.search-item');
+  items.forEach((item, i) => {
+    item.classList.toggle('selected', i === selectedSearchIndex);
+  });
+}
+
+// Debounce helper
+function debounce(fn, ms) {
+  let timeout;
+  return (...args) => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => fn(...args), ms);
+  };
+}
+
+const debouncedSearch = debounce(searchPages, 150);
+
+// Normalize slug to lowercase, strip .md extension
+function normalizeSlug(path) {
+  return (path.replace(/\.md$/, '') || 'home').toLowerCase();
+}
+
 // Custom resolver for Parchment - queries SQLite
 async function wikiResolver(path) {
-  const slug = path.replace(/\.md$/, '') || 'home';
+  const slug = normalizeSlug(path);
   currentSlug = slug;
 
   try {
@@ -64,6 +238,7 @@ async function wikiResolver(path) {
 
 // Save page to database
 async function savePage(slug, content) {
+  slug = normalizeSlug(slug);
   const now = new Date().toISOString();
   await db.exec(
     `INSERT INTO pages (slug, content, updated_at) VALUES (?, ?, ?)
@@ -223,7 +398,7 @@ async function init() {
       historyMode: 'param',
       paramName: 'path',
       onLoad: (path) => {
-        const slug = path.replace(/\.md$/, '') || 'home';
+        const slug = normalizeSlug(path);
         pageTitle.textContent = slug;
         currentSlug = slug;
       }
@@ -281,8 +456,58 @@ cancelBtn.addEventListener('click', handleCancel);
 shareBtn.addEventListener('click', handleShare);
 editorTextarea.addEventListener('input', updatePreview);
 
+// Search event listeners
+searchInput.addEventListener('input', (e) => debouncedSearch(e.target.value));
+
+searchInput.addEventListener('keydown', (e) => {
+  if (!searchDropdown.classList.contains('hidden')) {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      selectSearchResult(selectedSearchIndex + 1);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      selectSearchResult(selectedSearchIndex - 1);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (selectedSearchIndex >= 0 && selectedSearchIndex < searchResults.length) {
+        navigateToPage(searchResults[selectedSearchIndex].slug);
+      } else if (searchInput.value.trim()) {
+        // Create new page
+        navigateToPage(searchInput.value.trim());
+      }
+    } else if (e.key === 'Escape') {
+      hideSearchDropdown();
+      searchInput.blur();
+    }
+  }
+});
+
+searchInput.addEventListener('blur', () => {
+  // Delay to allow click on dropdown items
+  setTimeout(hideSearchDropdown, 200);
+});
+
+searchDropdown.addEventListener('click', (e) => {
+  const item = e.target.closest('.search-item');
+  const createItem = e.target.closest('.search-create');
+
+  if (item) {
+    navigateToPage(item.dataset.slug);
+  } else if (createItem) {
+    navigateToPage(createItem.dataset.create);
+  }
+});
+
 // Keyboard shortcuts
 document.addEventListener('keydown', (e) => {
+  // Cmd/Ctrl+K to focus search
+  if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+    e.preventDefault();
+    searchInput.focus();
+    searchInput.select();
+    return;
+  }
+
   if (isEditing) {
     // Cmd/Ctrl+S to save
     if ((e.metaKey || e.ctrlKey) && e.key === 's') {
@@ -293,11 +518,16 @@ document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       handleCancel();
     }
-  } else {
-    // E to edit
+  } else if (document.activeElement !== searchInput) {
+    // E to edit (only when not in search)
     if (e.key === 'e' && !e.metaKey && !e.ctrlKey) {
       e.preventDefault();
       enterEditMode();
+    }
+    // / to focus search (vim-style)
+    if (e.key === '/' && !e.metaKey && !e.ctrlKey) {
+      e.preventDefault();
+      searchInput.focus();
     }
   }
 });
