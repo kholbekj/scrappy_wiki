@@ -1,0 +1,13 @@
+{
+  "name": "scrappy-wiki",
+  "version": "1.0.0",
+  "description": "A peer-to-peer wiki that syncs in real-time",
+  "type": "module",
+  "scripts": {
+    "serve": "npx serve .",
+    "sync": "node sync-daemon.js"
+  },
+  "dependencies": {
+    "puppeteer": "^21.0.0"
+  }
+}
