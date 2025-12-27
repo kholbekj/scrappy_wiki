@@ -101,6 +101,12 @@ const joinWikiBtn = document.getElementById('join-wiki-btn');
 const pickerHistory = document.getElementById('picker-history');
 const historyList = document.getElementById('history-list');
 
+// Version history panel elements
+const historyBtn = document.getElementById('history-btn');
+const historyPanel = document.getElementById('history-panel');
+const historyClose = document.getElementById('history-close');
+const historyVersions = document.getElementById('history-versions');
+
 // State
 let db = null;
 let currentSlug = 'home';
@@ -347,6 +353,42 @@ function goToWiki(token) {
   window.location.search = params.toString();
 }
 
+// Version history panel functions
+async function openHistoryPanel() {
+  historyPanel.classList.remove('hidden');
+
+  const versions = await getPageHistory(currentSlug);
+
+  if (versions.length === 0) {
+    historyVersions.innerHTML = '<div class="history-empty">No version history yet.<br>Save the page to create a version.</div>';
+    return;
+  }
+
+  historyVersions.innerHTML = versions.map(v => `
+    <div class="history-version" data-version-id="${v.id}">
+      <div class="history-version-time">${formatRelativeTime(v.created_at)}</div>
+      <div class="history-version-peer">by ${v.peer_id.slice(0, 8)}</div>
+      <div class="history-version-preview">${v.content.slice(0, 80).replace(/\n/g, ' ')}${v.content.length > 80 ? '...' : ''}</div>
+    </div>
+  `).join('');
+}
+
+function closeHistoryPanel() {
+  historyPanel.classList.add('hidden');
+}
+
+async function restoreVersion(versionId) {
+  const versions = await getPageHistory(currentSlug);
+  const version = versions.find(v => v.id === versionId);
+
+  if (version && confirm('Restore this version? This will save it as a new version.')) {
+    await savePage(currentSlug, version.content);
+    closeHistoryPanel();
+    Parchment.go(currentSlug);
+    setStatus('Version restored', 'success');
+  }
+}
+
 // Normalize slug to lowercase, strip .md extension
 function normalizeSlug(path) {
   return (path.replace(/\.md$/, '') || 'home').toLowerCase();
@@ -378,11 +420,31 @@ async function wikiResolver(path) {
 async function savePage(slug, content) {
   slug = normalizeSlug(slug);
   const now = new Date().toISOString();
+  const versionId = crypto.randomUUID();
+
+  // Save current page
   await db.exec(
     `INSERT INTO pages (slug, content, updated_at) VALUES (?, ?, ?)
      ON CONFLICT(slug) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at`,
     [slug, content, now]
   );
+
+  // Save to version history
+  await db.exec(
+    `INSERT INTO page_versions (id, slug, content, created_at, peer_id) VALUES (?, ?, ?, ?, ?)`,
+    [versionId, slug, content, now, db.peerId || 'local']
+  );
+}
+
+// Get page version history
+async function getPageHistory(slug, limit = 50) {
+  const result = await db.exec(
+    `SELECT id, content, created_at, peer_id FROM page_versions
+     WHERE slug = ? ORDER BY created_at DESC LIMIT ?`,
+    [slug, limit]
+  );
+  return result.rows.map(([id, content, created_at, peer_id]) =>
+    ({ id, content, created_at, peer_id }));
 }
 
 // Editor functions
@@ -495,6 +557,18 @@ async function init() {
       )
     `);
     await db.enableSync('pages');
+
+    // Create page versions table for history
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS page_versions (
+        id TEXT PRIMARY KEY NOT NULL,
+        slug TEXT DEFAULT '',
+        content TEXT DEFAULT '',
+        created_at TEXT DEFAULT (datetime('now')),
+        peer_id TEXT DEFAULT ''
+      )
+    `);
+    await db.enableSync('page_versions');
 
     // Set up event handlers
     db.on('peer-ready', (peerId) => {
@@ -689,8 +763,25 @@ searchDropdown.addEventListener('click', (e) => {
   }
 });
 
+// Version history panel event listeners
+historyBtn.addEventListener('click', openHistoryPanel);
+historyClose.addEventListener('click', closeHistoryPanel);
+
+historyVersions.addEventListener('click', (e) => {
+  const item = e.target.closest('.history-version');
+  if (item) {
+    restoreVersion(item.dataset.versionId);
+  }
+});
+
 // Keyboard shortcuts
 document.addEventListener('keydown', (e) => {
+  // Escape to close history panel
+  if (e.key === 'Escape' && !historyPanel.classList.contains('hidden')) {
+    closeHistoryPanel();
+    return;
+  }
+
   // Cmd/Ctrl+K to focus search
   if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
     e.preventDefault();

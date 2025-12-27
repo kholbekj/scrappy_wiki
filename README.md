@@ -2,28 +2,11 @@
 
 A peer-to-peer wiki that syncs in real-time between browsers using WebRTC.
 
-## How It Works
+[Try here!](https://wiki.drifting.ink)
 
-- **Storage**: Pages are stored in SQLite (via IndexedDB) in your browser using [cr-sqlite](https://github.com/vlcn-io/cr-sqlite) for CRDT-based conflict resolution
-- **Sync**: Changes sync directly between peers via WebRTC data channels
-- **Signaling**: Initial peer discovery uses a lightweight WebSocket server (only for connection setup, no data passes through)
-- **Rendering**: Markdown pages are rendered using [Parchment](https://github.com/kholbekj/parchment) with a custom SQLite resolver
+This was an idea that came to me after creating [@drifting-ink/ledger](https://github.com/kholbekj/ledger). Combining it with [Parchment](https://github.com/kholbekj/parchment), a simple distributed wiki is born. This allows people to share a token and thereby a completely decentralized offline-first wiki. 
 
-## Usage
-
-1. Open the wiki - a unique token is generated automatically
-2. Share the URL to collaborate with others
-3. Edit pages with the Edit button or press `E`
-4. Create new pages by linking to them: `[new page](new-page)`
-5. Search pages with `/` or `Cmd/Ctrl+K`
-
-## Features
-
-- Real-time P2P sync (no central server for data)
-- Markdown editing with live preview
-- Fuzzy search across all pages
-- Works offline (syncs when peers reconnect)
-- Each token = isolated wiki with its own database
+The current conflict resolution is weak, and simultaneous offline edits to the same page will have latest write win.
 
 ## Keyboard Shortcuts
 
@@ -38,7 +21,6 @@ A peer-to-peer wiki that syncs in real-time between browsers using WebRTC.
 
 - [@drifting-ink/ledger](https://github.com/kholbekj/ledger) - P2P SQLite sync
 - [@drifting-ink/parchment](https://github.com/kholbekj/parchment) - Markdown navigation
-- [marked](https://github.com/markedjs/marked) - Markdown parser
 
 ## Running Locally
 

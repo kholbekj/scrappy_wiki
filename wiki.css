@@ -573,6 +573,105 @@ body {
   background: #fee2e2;
 }
 
+/* Version History Panel */
+.history-panel {
+  position: fixed;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 320px;
+  background: #fff;
+  border-left: 1px solid #e0e0e0;
+  box-shadow: -4px 0 12px rgba(0, 0, 0, 0.1);
+  z-index: 150;
+  display: flex;
+  flex-direction: column;
+}
+
+.history-header {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #e0e0e0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.history-header h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+}
+
+.history-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: #666;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.history-close:hover {
+  color: #333;
+}
+
+.history-versions {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.75rem;
+}
+
+.history-version {
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  margin-bottom: 0.5rem;
+  background: #f9fafb;
+  transition: background 0.15s;
+}
+
+.history-version:hover {
+  background: #f0f0f0;
+}
+
+.history-version-time {
+  font-weight: 500;
+  color: #333;
+  font-size: 0.875rem;
+}
+
+.history-version-peer {
+  font-size: 0.75rem;
+  color: #666;
+  margin-top: 0.125rem;
+}
+
+.history-version-preview {
+  font-size: 0.8rem;
+  color: #999;
+  margin-top: 0.375rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.history-empty {
+  text-align: center;
+  color: #999;
+  padding: 2rem 1rem;
+}
+
+.btn-history {
+  background: #f5f5f5;
+  color: #333;
+}
+
+.btn-history:hover {
+  background: #e0e0e0;
+}
+
 /* Utility */
 .hidden {
   display: none !important;

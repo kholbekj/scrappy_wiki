@@ -31,6 +31,7 @@
         <span class="peer-count">0 peers</span>
       </span>
       <button class="btn btn-edit" id="edit-btn">Edit</button>
+      <button class="btn btn-history" id="history-btn">History</button>
       <button class="btn btn-share" id="share-btn">Share</button>
     </div>
   </header>
@@ -77,6 +78,15 @@
       </div>
     </div>
   </main>
+
+  <!-- History panel (slide-in from right) -->
+  <div class="history-panel hidden" id="history-panel">
+    <div class="history-header">
+      <h2>Version History</h2>
+      <button class="history-close" id="history-close">&times;</button>
+    </div>
+    <div class="history-versions" id="history-versions"></div>
+  </div>
 
   <div class="status-bar hidden" id="status-bar">
     <span class="status-message">Initializing...</span>
