@@ -357,7 +357,11 @@ async function init() {
     // Set up event handlers
     db.on('peer-ready', (peerId) => {
       console.log('Peer connected:', peerId);
-      updatePeerStatus(db.getPeers().length);
+      const peerCount = db.getPeers().length;
+      updatePeerStatus(peerCount);
+      peerIndicator.classList.remove('connecting');
+      peerIndicator.classList.add('connected');
+      setStatus(`Connected with ${peerCount} peer${peerCount !== 1 ? 's' : ''}`, 'success');
     });
 
     db.on('peer-leave', (peerId) => {
@@ -386,7 +390,14 @@ async function init() {
     });
 
     db.on('reconnecting', (attempt) => {
+      peerIndicator.classList.add('connecting');
+      peerIndicator.classList.remove('connected');
       setStatus(`Reconnecting... (attempt ${attempt})`);
+    });
+
+    db.on('reconnected', () => {
+      peerIndicator.classList.add('connecting');
+      setStatus('Reconnected to signaling server');
     });
 
     // Initialize Parchment
