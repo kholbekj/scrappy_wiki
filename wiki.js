@@ -559,8 +559,129 @@ function exitEditMode() {
   editBtn.disabled = false;
 }
 
-function updatePreview() {
-  editorPreview.innerHTML = marked.parse(editorTextarea.value);
+async function updatePreview() {
+  let html = marked.parse(editorTextarea.value);
+  html = await resolveImageRefs(html);
+  editorPreview.innerHTML = html;
+}
+
+// Image handling for drag & drop and paste
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function insertImageAtCursor(file) {
+  if (!file.type.startsWith('image/')) {
+    setStatus('Only image files are supported', 'error');
+    return;
+  }
+
+  // Limit file size (2MB)
+  if (file.size > 2 * 1024 * 1024) {
+    setStatus('Image too large (max 2MB)', 'error');
+    return;
+  }
+
+  setStatus('Processing image...');
+
+  try {
+    const base64 = await fileToBase64(file);
+    const imageId = crypto.randomUUID().slice(0, 8);
+    const name = file.name.replace(/\.[^.]+$/, '') || 'image';
+    const now = new Date().toISOString();
+
+    // Store image in database
+    await db.exec(
+      `INSERT INTO images (id, data, mime_type, name, created_at) VALUES (?, ?, ?, ?, ?)`,
+      [imageId, base64, file.type, name, now]
+    );
+
+    // Use short reference in markdown
+    const markdown = `![${name}](img:${imageId})`;
+
+    // Insert at cursor position
+    const start = editorTextarea.selectionStart;
+    const end = editorTextarea.selectionEnd;
+    const text = editorTextarea.value;
+    editorTextarea.value = text.slice(0, start) + markdown + text.slice(end);
+
+    // Move cursor after inserted image
+    editorTextarea.selectionStart = editorTextarea.selectionEnd = start + markdown.length;
+    editorTextarea.focus();
+
+    updatePreview();
+    setStatus('Image added', 'success');
+  } catch (err) {
+    console.error('Failed to process image:', err);
+    setStatus('Failed to add image', 'error');
+  }
+}
+
+// Resolve image references to data URLs
+async function resolveImageRefs(html) {
+  const imgRegex = /src="img:([a-f0-9-]+)"/g;
+  const matches = [...html.matchAll(imgRegex)];
+
+  for (const match of matches) {
+    const imageId = match[1];
+    try {
+      const result = await db.exec('SELECT data FROM images WHERE id = ?', [imageId]);
+      if (result.rows.length > 0) {
+        const dataUrl = result.rows[0][0];
+        html = html.replace(`src="img:${imageId}"`, `src="${dataUrl}"`);
+      }
+    } catch (err) {
+      console.error('Failed to load image:', imageId, err);
+    }
+  }
+
+  return html;
+}
+
+function handleEditorDragOver(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  editorTextarea.classList.add('drag-over');
+}
+
+function handleEditorDragLeave(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  editorTextarea.classList.remove('drag-over');
+}
+
+async function handleEditorDrop(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  editorTextarea.classList.remove('drag-over');
+
+  const files = e.dataTransfer?.files;
+  if (files && files.length > 0) {
+    for (const file of files) {
+      await insertImageAtCursor(file);
+    }
+  }
+}
+
+async function handleEditorPaste(e) {
+  const items = e.clipboardData?.items;
+  if (!items) return;
+
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      e.preventDefault();
+      const file = item.getAsFile();
+      if (file) {
+        await insertImageAtCursor(file);
+      }
+      return;
+    }
+  }
 }
 
 async function handleSave() {
@@ -652,6 +773,18 @@ async function init() {
     `);
     await db.enableSync('page_versions');
 
+    // Create images table for embedded images
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS images (
+        id TEXT PRIMARY KEY NOT NULL,
+        data TEXT DEFAULT '',
+        mime_type TEXT DEFAULT '',
+        name TEXT DEFAULT '',
+        created_at TEXT DEFAULT (datetime('now'))
+      )
+    `);
+    await db.enableSync('images');
+
     // Set up event handlers
     db.on('peer-ready', (peerId) => {
       console.log('Peer connected:', peerId);
@@ -706,10 +839,24 @@ async function init() {
       linkSelector: 'a[href]:not([href^="http"]):not([href^="https"]):not([href^="mailto"]):not([href^="#"])',
       historyMode: 'param',
       paramName: 'path',
-      onLoad: (path) => {
+      onLoad: async (path) => {
         const slug = normalizeSlug(path);
         pageTitle.textContent = slug;
         currentSlug = slug;
+
+        // Resolve image references after render
+        const images = wikiContent.querySelectorAll('img[src^="img:"]');
+        for (const img of images) {
+          const imageId = img.src.replace(/^.*img:/, '');
+          try {
+            const result = await db.exec('SELECT data FROM images WHERE id = ?', [imageId]);
+            if (result.rows.length > 0) {
+              img.src = result.rows[0][0];
+            }
+          } catch (err) {
+            console.error('Failed to load image:', imageId, err);
+          }
+        }
       }
     });
 
@@ -764,6 +911,10 @@ saveBtn.addEventListener('click', handleSave);
 cancelBtn.addEventListener('click', handleCancel);
 shareBtn.addEventListener('click', handleShare);
 editorTextarea.addEventListener('input', updatePreview);
+editorTextarea.addEventListener('dragover', handleEditorDragOver);
+editorTextarea.addEventListener('dragleave', handleEditorDragLeave);
+editorTextarea.addEventListener('drop', handleEditorDrop);
+editorTextarea.addEventListener('paste', handleEditorPaste);
 
 // Wiki picker event listeners
 newWikiBtn.addEventListener('click', () => {

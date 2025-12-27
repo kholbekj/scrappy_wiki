@@ -337,6 +337,11 @@ body {
   color: #999;
 }
 
+#editor-textarea.drag-over {
+  background: #e3f2fd;
+  border: 2px dashed #2196f3;
+}
+
 .editor-preview {
   padding: 1.5rem;
   overflow-y: auto;
