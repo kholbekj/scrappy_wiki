@@ -392,6 +392,187 @@ body {
   color: #2e7d32;
 }
 
+/* Wiki Picker */
+.wiki-picker {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh;
+}
+
+.picker-content {
+  background: #fff;
+  border-radius: 1rem;
+  padding: 3rem;
+  max-width: 480px;
+  width: 90%;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+.picker-content h1 {
+  font-size: 2rem;
+  color: #333;
+  margin-bottom: 0.5rem;
+  text-align: center;
+}
+
+.picker-subtitle {
+  color: #666;
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.picker-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.btn-primary:hover {
+  opacity: 0.9;
+}
+
+.btn-secondary {
+  background: #f5f5f5;
+  color: #333;
+}
+
+.btn-secondary:hover {
+  background: #e0e0e0;
+}
+
+.btn-large {
+  padding: 0.875rem 1.5rem;
+  font-size: 1rem;
+}
+
+.picker-divider {
+  display: flex;
+  align-items: center;
+  margin: 0.5rem 0;
+}
+
+.picker-divider::before,
+.picker-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #e0e0e0;
+}
+
+.picker-divider span {
+  padding: 0 1rem;
+  color: #999;
+  font-size: 0.875rem;
+}
+
+.picker-join {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.picker-join input {
+  flex: 1;
+  padding: 0.625rem 0.875rem;
+  border: 1px solid #e0e0e0;
+  border-radius: 0.375rem;
+  font-size: 0.9375rem;
+  outline: none;
+}
+
+.picker-join input:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
+}
+
+.picker-history {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #e0e0e0;
+}
+
+.picker-history h2 {
+  font-size: 1rem;
+  color: #666;
+  margin-bottom: 1rem;
+  font-weight: 500;
+}
+
+.picker-history.empty {
+  display: none;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background: #f9fafb;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.history-item:hover {
+  background: #f0f0f0;
+}
+
+.history-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.history-item-name {
+  font-weight: 500;
+  color: #333;
+}
+
+.history-item-token {
+  font-size: 0.75rem;
+  color: #999;
+  font-family: 'SF Mono', Monaco, monospace;
+}
+
+.history-item-time {
+  font-size: 0.75rem;
+  color: #999;
+}
+
+.history-item-delete {
+  padding: 0.25rem 0.5rem;
+  background: transparent;
+  border: none;
+  color: #999;
+  cursor: pointer;
+  font-size: 1rem;
+  border-radius: 0.25rem;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+}
+
+.history-item:hover .history-item-delete {
+  opacity: 1;
+}
+
+.history-item-delete:hover {
+  color: #ef4444;
+  background: #fee2e2;
+}
+
 /* Utility */
 .hidden {
   display: none !important;

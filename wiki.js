@@ -5,6 +5,75 @@ import { marked } from 'marked';
 await import('@drifting-ink/parchment');
 const Parchment = window.Parchment;
 
+// Wiki History IndexedDB helpers
+const HISTORY_DB_NAME = 'scrappy-wiki-history';
+const HISTORY_STORE_NAME = 'wikis';
+
+async function openHistoryDb() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(HISTORY_DB_NAME, 1);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result);
+    request.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(HISTORY_STORE_NAME)) {
+        const store = db.createObjectStore(HISTORY_STORE_NAME, { keyPath: 'token' });
+        store.createIndex('lastVisited', 'lastVisited', { unique: false });
+      }
+    };
+  });
+}
+
+async function saveWikiToHistory(token, name = null) {
+  const db = await openHistoryDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(HISTORY_STORE_NAME, 'readwrite');
+    const store = tx.objectStore(HISTORY_STORE_NAME);
+
+    // Get existing entry to preserve name if not provided
+    const getReq = store.get(token);
+    getReq.onsuccess = () => {
+      const existing = getReq.result;
+      store.put({
+        token,
+        name: name || existing?.name || token,
+        lastVisited: new Date().toISOString()
+      });
+    };
+
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror = () => { db.close(); reject(tx.error); };
+  });
+}
+
+async function getWikiHistory() {
+  const db = await openHistoryDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(HISTORY_STORE_NAME, 'readonly');
+    const store = tx.objectStore(HISTORY_STORE_NAME);
+    const index = store.index('lastVisited');
+    const request = index.getAll();
+
+    request.onsuccess = () => {
+      db.close();
+      // Sort by lastVisited descending
+      resolve(request.result.sort((a, b) => b.lastVisited.localeCompare(a.lastVisited)));
+    };
+    request.onerror = () => { db.close(); reject(request.error); };
+  });
+}
+
+async function deleteWikiFromHistory(token) {
+  const db = await openHistoryDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(HISTORY_STORE_NAME, 'readwrite');
+    const store = tx.objectStore(HISTORY_STORE_NAME);
+    store.delete(token);
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror = () => { db.close(); reject(tx.error); };
+  });
+}
+
 // DOM elements
 const wikiContent = document.getElementById('wiki-content');
 const editorPane = document.getElementById('editor-pane');
@@ -21,6 +90,16 @@ const statusBar = document.getElementById('status-bar');
 const statusMessage = statusBar.querySelector('.status-message');
 const searchInput = document.getElementById('search-input');
 const searchDropdown = document.getElementById('search-dropdown');
+
+// Wiki picker elements
+const wikiPicker = document.getElementById('wiki-picker');
+const toolbar = document.getElementById('toolbar');
+const mainContent = document.getElementById('main-content');
+const newWikiBtn = document.getElementById('new-wiki-btn');
+const joinTokenInput = document.getElementById('join-token-input');
+const joinWikiBtn = document.getElementById('join-wiki-btn');
+const pickerHistory = document.getElementById('picker-history');
+const historyList = document.getElementById('history-list');
 
 // State
 let db = null;
@@ -209,6 +288,65 @@ function debounce(fn, ms) {
 
 const debouncedSearch = debounce(searchPages, 150);
 
+// Wiki picker functions
+function formatRelativeTime(isoString) {
+  const date = new Date(isoString);
+  const now = new Date();
+  const diffMs = now - date;
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return 'just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString();
+}
+
+async function renderHistoryList() {
+  const wikis = await getWikiHistory();
+
+  if (wikis.length === 0) {
+    pickerHistory.classList.add('empty');
+    historyList.innerHTML = '';
+    return;
+  }
+
+  pickerHistory.classList.remove('empty');
+  historyList.innerHTML = wikis.map(wiki => `
+    <div class="history-item" data-token="${wiki.token}">
+      <div class="history-item-info">
+        <span class="history-item-name">${wiki.name}</span>
+        <span class="history-item-token">${wiki.token}</span>
+      </div>
+      <div class="history-item-time">${formatRelativeTime(wiki.lastVisited)}</div>
+      <button class="history-item-delete" data-delete="${wiki.token}" title="Remove from history">&times;</button>
+    </div>
+  `).join('');
+}
+
+function showWikiPicker() {
+  wikiPicker.classList.remove('hidden');
+  toolbar.classList.add('hidden');
+  mainContent.classList.add('hidden');
+  statusBar.classList.add('hidden');
+  renderHistoryList();
+}
+
+function hideWikiPicker() {
+  wikiPicker.classList.add('hidden');
+  toolbar.classList.remove('hidden');
+  mainContent.classList.remove('hidden');
+  statusBar.classList.remove('hidden');
+}
+
+function goToWiki(token) {
+  const params = new URLSearchParams(window.location.search);
+  params.set('token', token);
+  window.location.search = params.toString();
+}
+
 // Normalize slug to lowercase, strip .md extension
 function normalizeSlug(path) {
   return (path.replace(/\.md$/, '') || 'home').toLowerCase();
@@ -322,15 +460,19 @@ async function init() {
   try {
     // Check URL params - token is required
     const params = new URLSearchParams(window.location.search);
-    let token = params.get('token');
+    const token = params.get('token');
 
-    // If no token, generate one and redirect
+    // If no token, show wiki picker
     if (!token) {
-      token = crypto.randomUUID().slice(0, 8);
-      params.set('token', token);
-      window.location.search = params.toString();
+      showWikiPicker();
       return;
     }
+
+    // Hide picker and show wiki interface immediately
+    hideWikiPicker();
+
+    // Save this wiki to history (non-blocking, don't fail if IndexedDB unavailable)
+    saveWikiToHistory(token).catch(err => console.warn('Failed to save wiki history:', err));
 
     // Database name includes token for isolation
     const dbName = `scrappy-wiki-${token}`;
@@ -466,6 +608,44 @@ saveBtn.addEventListener('click', handleSave);
 cancelBtn.addEventListener('click', handleCancel);
 shareBtn.addEventListener('click', handleShare);
 editorTextarea.addEventListener('input', updatePreview);
+
+// Wiki picker event listeners
+newWikiBtn.addEventListener('click', () => {
+  const token = crypto.randomUUID().slice(0, 8);
+  goToWiki(token);
+});
+
+joinWikiBtn.addEventListener('click', () => {
+  const token = joinTokenInput.value.trim();
+  if (token) {
+    goToWiki(token);
+  }
+});
+
+joinTokenInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    const token = joinTokenInput.value.trim();
+    if (token) {
+      goToWiki(token);
+    }
+  }
+});
+
+historyList.addEventListener('click', async (e) => {
+  const deleteBtn = e.target.closest('.history-item-delete');
+  if (deleteBtn) {
+    e.stopPropagation();
+    const token = deleteBtn.dataset.delete;
+    await deleteWikiFromHistory(token);
+    await renderHistoryList();
+    return;
+  }
+
+  const item = e.target.closest('.history-item');
+  if (item) {
+    goToWiki(item.dataset.token);
+  }
+});
 
 // Search event listeners
 searchInput.addEventListener('input', (e) => debouncedSearch(e.target.value));

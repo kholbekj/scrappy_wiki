@@ -17,7 +17,7 @@
   </script>
 </head>
 <body>
-  <header class="toolbar">
+  <header class="toolbar hidden" id="toolbar">
     <div class="toolbar-left">
       <h1 class="page-title">home</h1>
       <div class="search-container">
@@ -35,7 +35,31 @@
     </div>
   </header>
 
-  <main class="content-area">
+  <!-- Wiki picker (shown when no token) -->
+  <div class="wiki-picker hidden" id="wiki-picker">
+    <div class="picker-content">
+      <h1>Scrappy Wiki</h1>
+      <p class="picker-subtitle">A peer-to-peer wiki that syncs in real-time</p>
+
+      <div class="picker-actions">
+        <button class="btn btn-primary btn-large" id="new-wiki-btn">Create New Wiki</button>
+        <div class="picker-divider">
+          <span>or join existing</span>
+        </div>
+        <div class="picker-join">
+          <input type="text" id="join-token-input" placeholder="Enter wiki token..." />
+          <button class="btn btn-secondary" id="join-wiki-btn">Join</button>
+        </div>
+      </div>
+
+      <div class="picker-history" id="picker-history">
+        <h2>Recent Wikis</h2>
+        <div class="history-list" id="history-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <main class="content-area hidden" id="main-content">
     <!-- View mode: rendered markdown -->
     <div id="wiki-content" class="wiki-view"></div>
 
@@ -54,7 +78,7 @@
     </div>
   </main>
 
-  <div class="status-bar" id="status-bar">
+  <div class="status-bar hidden" id="status-bar">
     <span class="status-message">Initializing...</span>
   </div>
 
