@@ -74,6 +74,21 @@ async function deleteWikiFromHistory(token) {
   });
 }
 
+// Active wiki session management
+const ACTIVE_WIKI_KEY = 'scrappy-wiki-active';
+
+async function getActiveWiki() {
+  return localStorage.getItem(ACTIVE_WIKI_KEY);
+}
+
+async function setActiveWiki(token) {
+  localStorage.setItem(ACTIVE_WIKI_KEY, token);
+}
+
+async function clearActiveWiki() {
+  localStorage.removeItem(ACTIVE_WIKI_KEY);
+}
+
 // DOM elements
 const wikiContent = document.getElementById('wiki-content');
 const editorPane = document.getElementById('editor-pane');
@@ -95,6 +110,7 @@ const searchDropdown = document.getElementById('search-dropdown');
 const wikiPicker = document.getElementById('wiki-picker');
 const toolbar = document.getElementById('toolbar');
 const mainContent = document.getElementById('main-content');
+const homeBtn = document.getElementById('home-btn');
 const newWikiBtn = document.getElementById('new-wiki-btn');
 const joinTokenInput = document.getElementById('join-token-input');
 const joinWikiBtn = document.getElementById('join-wiki-btn');
@@ -114,6 +130,7 @@ const historyCancel = document.getElementById('history-cancel');
 // State
 let db = null;
 let currentSlug = 'home';
+let currentToken = null;
 let isEditing = false;
 let originalContent = '';
 let searchResults = [];
@@ -353,10 +370,11 @@ function hideWikiPicker() {
   statusBar.classList.remove('hidden');
 }
 
-function goToWiki(token) {
-  const params = new URLSearchParams(window.location.search);
-  params.set('token', token);
-  window.location.search = params.toString();
+async function goToWiki(token) {
+  // Set as active wiki in storage
+  await setActiveWiki(token);
+  // Reload page without token in URL (init will pick up from storage)
+  window.location.href = window.location.pathname;
 }
 
 // Simple line-based diff
@@ -709,35 +727,48 @@ function handleCancel() {
 }
 
 async function handleShare() {
-  // Copy URL to clipboard (token is always present)
-  const url = window.location.href;
+  // Generate invite URL with just the token (no path)
+  const url = `${window.location.origin}${window.location.pathname}?token=${currentToken}`;
   try {
     await navigator.clipboard.writeText(url);
-    setStatus('Link copied to clipboard!', 'success');
+    setStatus('Invite link copied to clipboard!', 'success');
   } catch (err) {
     // Fallback for older browsers
-    prompt('Share this URL:', url);
+    prompt('Share this invite link:', url);
   }
 }
 
 // Initialize
 async function init() {
   try {
-    // Check URL params - token is required
+    // Check URL params
     const params = new URLSearchParams(window.location.search);
-    const token = params.get('token');
+    let token = params.get('token');
 
-    // If no token, show wiki picker
-    if (!token) {
-      showWikiPicker();
-      return;
+    // If token in URL, save it and strip from URL
+    if (token) {
+      // Save as active wiki
+      await setActiveWiki(token);
+      // Save to history
+      saveWikiToHistory(token).catch(err => console.warn('Failed to save wiki history:', err));
+      // Strip token from URL, keep path
+      params.delete('token');
+      const newUrl = params.toString() ? `?${params.toString()}` : window.location.pathname;
+      window.history.replaceState({}, '', newUrl);
+    } else {
+      // No token in URL - check for active wiki
+      token = await getActiveWiki();
+      if (!token) {
+        showWikiPicker();
+        return;
+      }
     }
+
+    // Store token in module state for share functionality
+    currentToken = token;
 
     // Hide picker and show wiki interface immediately
     hideWikiPicker();
-
-    // Save this wiki to history (non-blocking, don't fail if IndexedDB unavailable)
-    saveWikiToHistory(token).catch(err => console.warn('Failed to save wiki history:', err));
 
     // Database name includes token for isolation
     const dbName = `scrappy-wiki-${token}`;
@@ -917,6 +948,18 @@ editorTextarea.addEventListener('drop', handleEditorDrop);
 editorTextarea.addEventListener('paste', handleEditorPaste);
 
 // Wiki picker event listeners
+homeBtn.addEventListener('click', async () => {
+  // Clear active wiki and show picker
+  await clearActiveWiki();
+  // Disconnect from current database
+  if (db) {
+    try { db.disconnect(); } catch (e) { /* ignore */ }
+  }
+  // Clear URL params and show picker
+  window.history.replaceState({}, '', window.location.pathname);
+  showWikiPicker();
+});
+
 newWikiBtn.addEventListener('click', () => {
   const token = crypto.randomUUID().slice(0, 8);
   goToWiki(token);
