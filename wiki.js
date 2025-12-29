@@ -77,15 +77,15 @@ async function deleteWikiFromHistory(token) {
 // Active wiki session management
 const ACTIVE_WIKI_KEY = 'scrappy-wiki-active';
 
-async function getActiveWiki() {
+function getActiveWiki() {
   return localStorage.getItem(ACTIVE_WIKI_KEY);
 }
 
-async function setActiveWiki(token) {
+function setActiveWiki(token) {
   localStorage.setItem(ACTIVE_WIKI_KEY, token);
 }
 
-async function clearActiveWiki() {
+function clearActiveWiki() {
   localStorage.removeItem(ACTIVE_WIKI_KEY);
 }
 
@@ -370,9 +370,9 @@ function hideWikiPicker() {
   statusBar.classList.remove('hidden');
 }
 
-async function goToWiki(token) {
-  // Set as active wiki in storage
-  await setActiveWiki(token);
+function goToWiki(token) {
+  // Set as active wiki in storage (sync)
+  setActiveWiki(token);
   // Reload page without token in URL (init will pick up from storage)
   window.location.href = window.location.pathname;
 }
@@ -747,8 +747,8 @@ async function init() {
 
     // If token in URL, save it and strip from URL
     if (token) {
-      // Save as active wiki
-      await setActiveWiki(token);
+      // Save as active wiki (sync)
+      setActiveWiki(token);
       // Save to history
       saveWikiToHistory(token).catch(err => console.warn('Failed to save wiki history:', err));
       // Strip token from URL, keep path
@@ -756,12 +756,14 @@ async function init() {
       const newUrl = params.toString() ? `?${params.toString()}` : window.location.pathname;
       window.history.replaceState({}, '', newUrl);
     } else {
-      // No token in URL - check for active wiki
-      token = await getActiveWiki();
+      // No token in URL - check for active wiki (sync)
+      token = getActiveWiki();
       if (!token) {
         showWikiPicker();
         return;
       }
+      // Save to history (for newly created wikis from picker)
+      saveWikiToHistory(token).catch(err => console.warn('Failed to save wiki history:', err));
     }
 
     // Store token in module state for share functionality
@@ -948,9 +950,9 @@ editorTextarea.addEventListener('drop', handleEditorDrop);
 editorTextarea.addEventListener('paste', handleEditorPaste);
 
 // Wiki picker event listeners
-homeBtn.addEventListener('click', async () => {
-  // Clear active wiki and show picker
-  await clearActiveWiki();
+homeBtn.addEventListener('click', () => {
+  // Clear active wiki and show picker (sync)
+  clearActiveWiki();
   // Disconnect from current database
   if (db) {
     try { db.disconnect(); } catch (e) { /* ignore */ }
